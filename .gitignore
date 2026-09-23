@@ -2,4 +2,7 @@
 __pycache__/
 .pytest_cache/
 var/
+data/*
+!data/metallicadour.zip
+!data/metallicadour_features.csv
 *.pyc
