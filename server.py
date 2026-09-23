@@ -35,6 +35,21 @@ def index():
     return FileResponse(ROOT / "web" / "index.html")
 
 
+@app.get("/app.css")
+def css():
+    return FileResponse(ROOT / "web" / "app.css")
+
+
+@app.get("/app.js")
+def javascript():
+    return FileResponse(ROOT / "web" / "app.js")
+
+
+@app.get("/demo.json")
+def demo_file():
+    return FileResponse(DEMO_PATH)
+
+
 @app.get("/api/state")
 def state():
     return studio.state()

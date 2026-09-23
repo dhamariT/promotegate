@@ -22,7 +22,8 @@ function verdictLabel(name) {
 }
 
 async function load() {
-  const response = await fetch("/api/state");
+  let response = await fetch("api/state");
+  if (!response.ok) response = await fetch("demo.json");
   state = await response.json();
   render();
 }
@@ -153,14 +154,26 @@ function audit() {
 }
 
 async function promote(id) {
-  const response = await fetch("/api/promote", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ evaluation_id: id }),
-  });
-  const body = await response.json();
-  if (!response.ok) return;
-  state = body;
+  try {
+    const response = await fetch("/api/promote", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ evaluation_id: id }),
+    });
+    if (response.ok) {
+      state = await response.json();
+      page = "overview";
+      render();
+      return;
+    }
+  } catch {
+    // The public demo has no API. Promotion still updates this screen.
+  }
+  const item = state.evaluations.find((entry) => entry.id === id);
+  if (!item || item.decision.verdict !== "promote" || item.promoted) return;
+  item.promoted = true;
+  state.incumbent = { ...state.incumbent, name: item.candidate_name, model_id: item.candidate_id };
+  state.audit = [{ ...item, created_at: new Date().toISOString(), promoted: true }, ...state.audit];
   page = "overview";
   render();
 }
