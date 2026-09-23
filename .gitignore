@@ -1,4 +1,6 @@
 .venv/
+node_modules/
+pitch/node_modules/
 __pycache__/
 .pytest_cache/
 var/
