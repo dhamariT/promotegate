@@ -7,67 +7,30 @@
   <link rel="stylesheet" href="/static/app.css" />
 </head>
 <body>
-  <header class="top">
-    <div>
-      <p class="eyebrow">Predictive maintenance</p>
-      <h1>PromoteGate</h1>
-    </div>
-    <p class="lede">A new failure model is not deployed because it trained well. It has to beat the model already in production on missed failures, false alarms, and warning time.</p>
-    <div class="prod" id="incumbent">Production model loads with the first run.</div>
-  </header>
-
-  <main>
-    <section class="panel" id="rules-panel">
-      <div class="panel-head">
-        <h2>Pinned rules</h2>
-        <p>These are locked into the audit record when the gate runs. Editing them later does not rewrite a verdict.</p>
-      </div>
-      <form id="rules-form" class="rules">
-        <label>Minimum held-out failures<input name="min_held_out_failures" type="number" min="1" step="1" /></label>
-        <label>False-alarm cap (%)<input name="max_false_alarm_rate" type="number" min="0" max="100" step="0.1" /></label>
-        <label>Allowance above production (points)<input name="false_alarm_allowance" type="number" min="0" step="0.1" /></label>
-        <label>Minimum median lead (hours)<input name="min_median_lead_hours" type="number" min="0" step="0.5" /></label>
-        <label>Allowed shorter warning (hours)<input name="max_lead_regression_hours" type="number" min="0" step="0.5" /></label>
-        <label>Extra warning that counts as better (hours)<input name="min_lead_improvement_hours" type="number" min="0" step="0.5" /></label>
-        <button type="submit">Save rules</button>
-        <p class="form-note" id="rules-note"></p>
-      </form>
-    </section>
-
-    <section class="panel run-panel">
+  <aside>
+    <div class="brand">PromoteGate</div>
+    <p class="brand-note">Failure models for ABB equipment</p>
+    <nav>
+      <button type="button" data-page="overview" class="active">Overview</button>
+      <button type="button" data-page="data">Recordings</button>
+      <button type="button" data-page="models">Models</button>
+      <button type="button" data-page="gate">Decision</button>
+      <button type="button" data-page="explain">Why it scored</button>
+      <button type="button" data-page="audit">Audit</button>
+    </nav>
+  </aside>
+  <div class="shell">
+    <header>
       <div>
-        <h2>Agent</h2>
-        <p>Profiles the fleet, trains LightGBM and XGBoost, explains them, and runs every candidate through the gate. It stops before production.</p>
+        <p class="kicker" id="fleet-name">ABB IRB 6660</p>
+        <h1 id="page-title">Overview</h1>
       </div>
-      <button id="run" type="button">Run the agent</button>
-    </section>
-
-    <section class="panel" id="transcript-panel" hidden>
-      <h2>What the agent did</h2>
-      <ol id="transcript"></ol>
-    </section>
-
-    <section class="panel" id="profile-panel" hidden>
-      <h2>Dataset</h2>
-      <div class="stats" id="stats"></div>
-      <ul class="issues" id="issues"></ul>
-    </section>
-
-    <section class="panel" id="results-panel" hidden>
-      <h2>Gate</h2>
-      <div class="cards" id="cards"></div>
-    </section>
-
-    <section class="panel" id="explain-panel" hidden>
-      <h2>Why the trained models score the way they do</h2>
-      <div id="explain"></div>
-    </section>
-
-    <section class="panel">
-      <h2>Audit</h2>
-      <div id="audit"><p class="quiet">No verdicts yet.</p></div>
-    </section>
-  </main>
+      <div class="prod" id="incumbent">Production model</div>
+    </header>
+    <main id="app">
+      <p class="quiet">Loading the held-out result.</p>
+    </main>
+  </div>
   <script src="/static/app.js"></script>
 </body>
 </html>

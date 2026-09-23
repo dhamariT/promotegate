@@ -1,134 +1,155 @@
-const rulesForm = document.querySelector("#rules-form");
-const rulesNote = document.querySelector("#rules-note");
-const runButton = document.querySelector("#run");
-
-const fields = {
-  min_held_out_failures: (rules) => rules.min_held_out_failures,
-  max_false_alarm_rate: (rules) => (rules.max_false_alarm_rate * 100).toFixed(1),
-  false_alarm_allowance: (rules) => (rules.false_alarm_allowance * 100).toFixed(1),
-  min_median_lead_hours: (rules) => rules.min_median_lead_hours,
-  max_lead_regression_hours: (rules) => rules.max_lead_regression_hours,
-  min_lead_improvement_hours: (rules) => rules.min_lead_improvement_hours,
+const titles = {
+  overview: "Overview",
+  data: "Recordings",
+  models: "Models",
+  gate: "Decision",
+  explain: "Why it scored",
+  audit: "Audit",
 };
+
+let state = null;
+let page = "overview";
 
 function pct(value) {
   if (value === null || value === undefined) return "n/a";
-  return `${(value * 100).toFixed(1)}%`;
-}
-function hours(value) {
-  if (value === null || value === undefined) return "n/a";
-  return `${Number(value).toFixed(1)}h`;
+  return `${(Number(value) * 100).toFixed(1)}%`;
 }
 
-function fillRules(rules) {
-  for (const [name, read] of Object.entries(fields)) {
-    rulesForm.elements[name].value = read(rules);
-  }
+function verdictLabel(name) {
+  if (name === "promote") return "Ready to promote";
+  if (name === "reject") return "Rejected";
+  return "Not enough evidence";
 }
 
-function rulesPayload() {
-  const data = new FormData(rulesForm);
-  return {
-    min_held_out_failures: Number(data.get("min_held_out_failures")),
-    max_false_alarm_rate: Number(data.get("max_false_alarm_rate")) / 100,
-    false_alarm_allowance: Number(data.get("false_alarm_allowance")) / 100,
-    min_median_lead_hours: Number(data.get("min_median_lead_hours")),
-    max_lead_regression_hours: Number(data.get("max_lead_regression_hours")),
-    min_lead_improvement_hours: Number(data.get("min_lead_improvement_hours")),
-  };
+async function load() {
+  const response = await fetch("/api/state");
+  state = await response.json();
+  render();
 }
 
-function render(state) {
-  fillRules(state.rules);
+function render() {
+  document.querySelector("#page-title").textContent = titles[page];
+  document.querySelector("#fleet-name").textContent = state.profile?.name || "ABB IRB 6660";
   document.querySelector("#incumbent").textContent = `In production: ${state.incumbent.name}`;
-
-  const transcript = document.querySelector("#transcript");
-  const transcriptPanel = document.querySelector("#transcript-panel");
-  transcriptPanel.hidden = state.transcript.length === 0;
-  transcript.innerHTML = state.transcript.map((line) => `<li>${line}</li>`).join("");
-
-  const profilePanel = document.querySelector("#profile-panel");
-  profilePanel.hidden = !state.profile;
-  if (state.profile) {
-    const profile = state.profile;
-    document.querySelector("#stats").innerHTML = [
-      ["Compressors", profile.assets],
-      ["Hours", profile.rows],
-      ["Failures", profile.failed_assets],
-      ["Held-out failures", profile.held_out_failures],
-    ].map(([label, value]) => `<div><strong>${value}</strong><span>${label}</span></div>`).join("");
-    document.querySelector("#issues").innerHTML = profile.issues
-      .map((issue) => `<li class="${issue.severity}">${issue.message}</li>`)
-      .join("");
-  }
-
-  const results = document.querySelector("#results-panel");
-  results.hidden = state.evaluations.length === 0;
-  document.querySelector("#cards").innerHTML = state.evaluations.map(card).join("");
-
-  const explainPanel = document.querySelector("#explain-panel");
-  const explainable = state.evaluations.filter((item) => state.explanations[item.candidate_id]);
-  explainPanel.hidden = explainable.length === 0;
-  document.querySelector("#explain").innerHTML = `<div class="explain-grid">${explainable.map((item) => explainBlock(item, state)).join("")}</div>`;
-
-  const audit = state.audit;
-  document.querySelector("#audit").innerHTML = audit.length
-    ? audit.map(auditItem).join("")
-    : `<p class="quiet">No verdicts yet.</p>`;
-
+  document.querySelectorAll("nav button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.page === page);
+  });
+  const views = { overview, data, models, gate, explain, audit };
+  document.querySelector("#app").innerHTML = views[page]();
+  document.querySelectorAll("[data-go]").forEach((button) => {
+    button.addEventListener("click", () => {
+      page = button.dataset.go;
+      render();
+    });
+  });
   document.querySelectorAll("[data-promote]").forEach((button) => {
     button.addEventListener("click", () => promote(button.dataset.promote));
   });
 }
 
-function card(record) {
-  const verdict = record.decision.verdict;
-  const candidate = record.candidate_metrics;
-  const incumbent = record.incumbent_metrics;
-  const rows = [
-    ["Missed failures", `${candidate.missed_failures}/${candidate.failures} (${pct(candidate.missed_failure_rate)})`, `${incumbent.missed_failures}/${incumbent.failures} (${pct(incumbent.missed_failure_rate)})`],
-    ["False alarms", pct(candidate.false_alarm_rate), pct(incumbent.false_alarm_rate)],
-    ["Median lead", hours(candidate.median_lead_hours), hours(incumbent.median_lead_hours)],
-  ];
-  const canPromote = verdict === "promote" && !record.promoted;
-  const label = record.promoted ? "In production" : verdict === "promote" ? "Promote into production" : "Not promoted";
-  return `<article class="card">
-    <header>
-      <h3>${record.candidate_name}</h3>
-      <span class="verdict ${verdict}">${verdict}</span>
-    </header>
-    <p class="summary">${record.decision.summary}</p>
-    <table>
-      <thead><tr><th></th><th>Candidate</th><th>Production</th></tr></thead>
-      <tbody>${rows.map((row) => `<tr><th>${row[0]}</th><td>${row[1]}</td><td>${row[2]}</td></tr>`).join("")}</tbody>
-    </table>
-    ${record.decision.checks.map((check) => `<p class="check ${check.passed ? "pass" : "fail"}">${check.passed ? "Pass" : "Fail"}. ${check.detail}</p>`).join("")}
-    <button type="button" data-promote="${record.id}" class="${verdict}" ${canPromote ? "" : "disabled"}>${label}</button>
-  </article>`;
+function winner() {
+  return state.evaluations.find((item) => item.decision.verdict === "promote");
 }
 
-function explainBlock(record, state) {
-  const explanation = state.explanations[record.candidate_id];
-  const confidence = state.confidence[record.candidate_id];
-  const max = Math.max(...explanation.features.map((feature) => feature.mean_abs_shap), 0.0001);
-  const bars = explanation.features.slice(0, 5).map((feature) => {
-    const width = Math.max(2, (feature.mean_abs_shap / max) * 100);
-    return `<div class="bar-row"><span>${feature.name}</span><div class="bar"><span style="width:${width}%"></span></div><span>${feature.mean_abs_shap.toFixed(3)}</span></div>`;
+function overview() {
+  const best = winner();
+  const production = best?.incumbent_metrics;
+  const model = best?.candidate_metrics;
+  if (!best) {
+    return `<section class="hero"><div><h2>No model has earned promotion.</h2><p class="quiet">Run is loaded from the ABB recordings. Open Models to see why each one was rejected.</p></div></section>`;
+  }
+  return `<section class="hero">
+    <div>
+      <p class="verdict promote">${best.promoted ? "In production" : "Ready for production"}</p>
+      <h2>${best.candidate_name} beats the vibration limit</h2>
+      <p>On recordings this model had not seen, it missed ${model.missed_failures} of ${model.failures} faults. The limit already in production missed ${production.missed_failures}. False alarms were ${pct(model.false_alarm_rate)} against ${pct(production.false_alarm_rate)}.</p>
+      <div class="actions">
+        <button class="primary" type="button" data-promote="${best.id}" ${best.promoted ? "disabled" : ""}>${best.promoted ? "In production" : "Promote into production"}</button>
+        <button class="ghost" type="button" data-go="models">Compare all models</button>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><strong>${model.missed_failures}/${model.failures}</strong><span>Faults missed</span></div>
+      <div class="stat"><strong>${pct(model.false_alarm_rate)}</strong><span>False alarms</span></div>
+      <div class="stat"><strong>${production.missed_failures}/${production.failures}</strong><span>Missed by production</span></div>
+    </div>
+  </section>
+  <p class="note">These are held-out passes from a real ABB IRB 6660. More passes from the line make the next comparison stricter, not looser.</p>`;
+}
+
+function data() {
+  const profile = state.profile;
+  if (!profile) return `<p class="quiet">No recordings loaded.</p>`;
+  return `<section class="panel">
+    <h2>${profile.name}</h2>
+    <p class="quiet">Each row is one recorded pass: current, force, torque, and vibration, plus the cut settings. The label is the folder the recording came from: healthy tool, damaged tool, or a drifted axis.</p>
+    <div class="stats" style="margin-top:0.8rem">
+      <div class="stat"><strong>${profile.rows}</strong><span>Recordings</span></div>
+      <div class="stat"><strong>${profile.failed_assets}</strong><span>Labeled faults</span></div>
+      <div class="stat"><strong>${profile.held_out_failures}</strong><span>Held out for the gate</span></div>
+    </div>
+    <div class="stack">${(profile.issues || []).filter((issue) => issue.severity === "warn").slice(0, 4).map((issue) => `<p>${issue.message}</p>`).join("") || `<p class="quiet">No data-quality warnings on this fleet.</p>`}</div>
+  </section>`;
+}
+
+function models() {
+  const rows = state.evaluations.map((item) => {
+    const metrics = item.candidate_metrics;
+    const ready = item.decision.verdict === "promote" && !item.promoted;
+    return `<tr class="${item.decision.verdict === "promote" ? "winner" : ""}">
+      <td>${item.candidate_name}</td>
+      <td>${metrics.missed_failures}/${metrics.failures}</td>
+      <td>${pct(metrics.false_alarm_rate)}</td>
+      <td class="verdict ${item.decision.verdict}">${verdictLabel(item.decision.verdict)}</td>
+      <td>${ready ? `<button class="primary" type="button" data-promote="${item.id}">Promote</button>` : item.promoted ? "In production" : "—"}</td>
+    </tr>`;
   }).join("");
-  const gap = confidence
-    ? `<p class="score-gap">Mean score in the ${state.profile.horizon_hours}h before a held-out failure: ${Number(confidence.pre_failure_mean_score).toFixed(3)}. On healthy hours: ${Number(confidence.healthy_mean_score).toFixed(3)}.</p>`
-    : "";
-  return `<div><h3>${record.candidate_name}</h3><p class="score-gap">${explanation.note}</p>${gap}${bars}</div>`;
+  return `<section class="panel"><table>
+    <thead><tr><th>Model</th><th>Missed faults</th><th>False alarms</th><th>Gate</th><th></th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <p class="note">Production on this comparison missed ${state.evaluations[0]?.incumbent_metrics.missed_failures ?? "—"} of ${state.evaluations[0]?.incumbent_metrics.failures ?? "—"} and false-alarmed at ${pct(state.evaluations[0]?.incumbent_metrics.false_alarm_rate)}.</p>
+  </section>`;
 }
 
-function auditItem(record) {
-  const promoted = record.promoted ? " Promoted." : "";
-  return `<article class="audit-item">
-    <div class="when">${record.created_at} · ${record.id}</div>
-    <strong>${record.candidate_name}</strong> vs ${record.incumbent_name}:
-    <span class="verdict ${record.decision.verdict}">${record.decision.verdict}</span>.${promoted}
-    <div>${record.decision.summary}</div>
-  </article>`;
+function gate() {
+  const best = winner() || state.evaluations[0];
+  if (!best) return `<p class="quiet">No decision yet.</p>`;
+  const checks = best.decision.checks.map((check) => `<div class="check"><span class="tag ${check.passed ? "pass" : "fail"}">${check.passed ? "Pass" : "Fail"}</span><span>${check.detail}</span></div>`).join("");
+  const ready = best.decision.verdict === "promote" && !best.promoted;
+  return `<section class="panel">
+    <p class="verdict ${best.decision.verdict}">${verdictLabel(best.decision.verdict)}</p>
+    <h2 style="margin-top:0.3rem">${best.candidate_name}</h2>
+    <p class="quiet" style="margin:0.4rem 0 0.6rem">${best.decision.summary}</p>
+    ${checks}
+    <div class="actions"><button class="primary" type="button" data-promote="${best.id}" ${ready ? "" : "disabled"}>${best.promoted ? "In production" : ready ? "Promote into production" : "Not promoted"}</button></div>
+  </section>`;
+}
+
+function explain() {
+  const blocks = state.evaluations.filter((item) => state.explanations[item.candidate_id]).map((item) => {
+    const explanation = state.explanations[item.candidate_id];
+    const confidence = state.confidence[item.candidate_id];
+    const max = Math.max(...explanation.features.map((feature) => feature.mean_abs_shap), 0.0001);
+    const bars = explanation.features.slice(0, 5).map((feature) => {
+      const width = Math.max(3, (feature.mean_abs_shap / max) * 100);
+      return `<div class="bar-row"><span>${feature.name.replaceAll("_", " ")}</span><div class="track"><span style="width:${width}%"></span></div><span>${feature.mean_abs_shap.toFixed(2)}</span></div>`;
+    }).join("");
+    const gap = confidence ? `<p class="note">Average score on fault passes: ${Number(confidence.pre_failure_mean_score).toFixed(2)}. On healthy passes: ${Number(confidence.healthy_mean_score).toFixed(2)}.</p>` : "";
+    return `<section class="panel"><h2>${item.candidate_name}</h2><p class="note">${explanation.note}</p>${gap}<div class="bars">${bars}</div></section>`;
+  }).join("");
+  return `<div class="stack">${blocks || `<p class="quiet">No explanation yet.</p>`}</div>`;
+}
+
+function audit() {
+  if (!state.audit.length) return `<p class="quiet">No verdicts yet.</p>`;
+  return `<section class="panel">${state.audit.map((item) => `<article class="audit-item">
+    <div class="when">${item.created_at}</div>
+    <strong>${item.candidate_name}</strong>
+    <span class="verdict ${item.decision.verdict}">${verdictLabel(item.decision.verdict)}</span>
+    ${item.promoted ? "<span>Promoted.</span>" : ""}
+    <p class="note">${item.decision.summary}</p>
+  </article>`).join("")}</section>`;
 }
 
 async function promote(id) {
@@ -138,56 +159,17 @@ async function promote(id) {
     body: JSON.stringify({ evaluation_id: id }),
   });
   const body = await response.json();
-  if (!response.ok) {
-    rulesNote.textContent = body.detail || "Promotion was refused.";
-    return;
-  }
-  rulesNote.textContent = "";
-  render(body);
+  if (!response.ok) return;
+  state = body;
+  page = "overview";
+  render();
 }
 
-rulesForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const response = await fetch("/api/rules", {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(rulesPayload()),
+document.querySelectorAll("nav button").forEach((button) => {
+  button.addEventListener("click", () => {
+    page = button.dataset.page;
+    render();
   });
-  const body = await response.json();
-  if (!response.ok) {
-    rulesNote.textContent = body.detail || "Those rules are not valid.";
-    return;
-  }
-  rulesNote.textContent = "Rules saved. Past verdicts were not changed.";
-  render(body);
 });
 
-runButton.addEventListener("click", async () => {
-  runButton.disabled = true;
-  runButton.textContent = "Running";
-  rulesNote.textContent = "";
-  try {
-    const saved = await fetch("/api/rules", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(rulesPayload()),
-    });
-    if (!saved.ok) {
-      const body = await saved.json();
-      rulesNote.textContent = body.detail || "Save the rules before running.";
-      return;
-    }
-    const response = await fetch("/api/run", { method: "POST" });
-    const body = await response.json();
-    if (!response.ok) {
-      rulesNote.textContent = body.detail || "The run failed.";
-      return;
-    }
-    render(body);
-  } finally {
-    runButton.disabled = false;
-    runButton.textContent = "Run the agent";
-  }
-});
-
-fetch("/api/state").then((response) => response.json()).then(render);
+load();

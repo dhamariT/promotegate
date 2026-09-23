@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -9,6 +10,9 @@ from promotegate.studio import Studio
 
 ROOT = Path(__file__).resolve().parent
 studio = Studio(ROOT / "var")
+DEMO_PATH = ROOT / "web" / "demo.json"
+if DEMO_PATH.exists():
+    studio.load_demo(json.loads(DEMO_PATH.read_text()))
 app = FastAPI(title="PromoteGate")
 app.mount("/static", StaticFiles(directory=ROOT / "web"), name="static")
 

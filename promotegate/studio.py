@@ -78,6 +78,33 @@ class Studio:
         with self._audit_path().open("a") as handle:
             handle.write(json.dumps(_jsonable(record)) + "\n")
 
+    def load_demo(self, payload: dict) -> None:
+        from promotegate.modeling import Scorer
+
+        self.profile = payload.get("profile")
+        self.transcript = payload.get("transcript") or []
+        self.explanations = payload.get("explanations") or {}
+        self.confidence = payload.get("confidence") or {}
+        self.evaluations = payload.get("evaluations") or []
+        incumbent = payload.get("incumbent") or {}
+        self.incumbent = Scorer(
+            model_id=incumbent.get("model_id", "vibration-limit"),
+            name=incumbent.get("name", "Vibration RMS high-limit"),
+            kind=incumbent.get("kind", "column_limit"),
+            threshold=float(incumbent.get("threshold") or 0),
+            column="vibration_x_rms",
+        )
+        self.candidates = {
+            item["candidate_id"]: Scorer(
+                model_id=item["candidate_id"],
+                name=item["candidate_name"],
+                kind="demo",
+                threshold=float(item.get("threshold") or 0.5),
+            )
+            for item in self.evaluations
+        }
+        self.audit = list(payload.get("audit") or self.evaluations)
+
     def state(self) -> dict:
         return _jsonable(
             {
