@@ -28,12 +28,16 @@ class Scorer:
     kind: str
     threshold: float
     model: object | None = None
+    features: list[str] | None = None
+    column: str | None = None
 
     def scores(self, frame: pd.DataFrame) -> np.ndarray:
         if self.kind == "temperature_limit":
             return frame["temperature_c"].to_numpy(dtype=float)
-        features = frame[FEATURES]
-        probability = self.model.predict_proba(features)[:, 1]
+        if self.kind == "column_limit":
+            return frame[self.column].to_numpy(dtype=float)
+        names = self.features if self.features is not None else FEATURES
+        probability = self.model.predict_proba(frame[names])[:, 1]
         return np.asarray(probability, dtype=float)
 
 
@@ -46,7 +50,9 @@ def temperature_limit() -> Scorer:
     )
 
 
-def _labels(frame: pd.DataFrame, horizon: int) -> np.ndarray:
+def _labels(frame: pd.DataFrame, horizon: int, snapshots: bool = False) -> np.ndarray:
+    if snapshots:
+        return frame["is_fault"].astype(int).to_numpy()
     failure = frame["failure_hour"]
     hours = frame["hour"]
     positive = failure.notna() & (hours >= failure - horizon) & (hours < failure)
@@ -117,30 +123,55 @@ def _fit_tree(kind: str, features: pd.DataFrame, labels: np.ndarray):
 def train_candidate(fleet: Fleet, kind: str) -> Scorer:
     if kind not in {"lightgbm", "xgboost"}:
         raise ValueError(f"unknown model kind {kind}")
+    names = fleet.feature_names()
     train = fleet.readings[fleet.readings["split"] == "train"]
     if train.empty:
         raise ValueError("fleet is missing a train split")
-    model = _fit_tree(kind, train[FEATURES], _labels(train, fleet.horizon_hours))
+    model = _fit_tree(kind, train[names], _labels(train, fleet.horizon_hours, fleet.snapshots))
     scorer = Scorer(
         model_id=kind,
         name="LightGBM" if kind == "lightgbm" else "XGBoost",
         kind=kind,
         threshold=0.5,
         model=model,
+        features=names,
     )
-    # Thresholds are chosen on training compressors only. Held-out failures stay unseen.
+    # Thresholds are chosen on training rows only. Held-out failures stay unseen.
     train_scores = scorer.scores(train)
-    scorer.threshold = choose_threshold(train, train_scores, fleet.horizon_hours, far_cap=0.02)
+    if fleet.snapshots:
+        from promotegate.metrics import score_snapshots
+
+        grid = np.unique(np.quantile(train_scores, np.linspace(0.02, 0.98, 49)))
+        best_threshold = float(grid[-1])
+        best_key = None
+        faults = train["is_fault"].to_numpy()
+        for threshold in grid:
+            metrics = score_snapshots(faults, train_scores, float(threshold))
+            if metrics.false_alarm_rate is None or metrics.missed_failure_rate is None:
+                continue
+            under_cap = metrics.false_alarm_rate <= 0.05
+            key = (
+                0 if under_cap else 1,
+                metrics.missed_failure_rate,
+                metrics.false_alarm_rate,
+            )
+            if best_key is None or key < best_key:
+                best_key = key
+                best_threshold = float(threshold)
+        scorer.threshold = best_threshold
+    else:
+        scorer.threshold = choose_threshold(train, train_scores, fleet.horizon_hours, far_cap=0.02)
     return scorer
 
 
 def _gain(scorer: Scorer) -> list[dict]:
     booster = getattr(scorer.model, "feature_importances_", None)
+    names = scorer.features if scorer.features is not None else FEATURES
     if booster is None:
         return []
     order = np.argsort(booster)[::-1]
     return [
-        {"name": FEATURES[int(index)], "mean_abs_shap": float(booster[int(index)])}
+        {"name": names[int(index)], "mean_abs_shap": float(booster[int(index)])}
         for index in order
         if booster[int(index)] > 0
     ]
@@ -156,7 +187,8 @@ def explain(scorer: Scorer, frame: pd.DataFrame, limit: int = 400) -> dict:
     try:
         import shap
 
-        sample = frame[FEATURES].tail(limit)
+        names = scorer.features if scorer.features is not None else FEATURES
+        sample = frame[names].tail(limit)
         explainer = shap.TreeExplainer(scorer.model)
         values = explainer.shap_values(sample)
         if isinstance(values, list):
@@ -167,7 +199,7 @@ def explain(scorer: Scorer, frame: pd.DataFrame, limit: int = 400) -> dict:
         mean_abs = np.abs(values).mean(axis=0)
         order = np.argsort(mean_abs)[::-1]
         ranked = [
-            {"name": FEATURES[int(index)], "mean_abs_shap": float(mean_abs[int(index)])}
+            {"name": names[int(index)], "mean_abs_shap": float(mean_abs[int(index)])}
             for index in order
         ]
         return {

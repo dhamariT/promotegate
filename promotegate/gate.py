@@ -157,7 +157,15 @@ def decide(candidate: AlarmMetrics, incumbent: AlarmMetrics, rules: Rules) -> De
 
     lead = candidate.median_lead_hours
     incumbent_lead = incumbent.median_lead_hours
-    if lead is None:
+    if not candidate.lead_applicable:
+        lead = None
+        incumbent_lead = None
+        lead_ok = True
+        lead_detail = (
+            "These recordings are labeled health snapshots. "
+            "Warning time is not in the data, so it is not scored."
+        )
+    elif lead is None:
         lead_ok = False
         lead_detail = "Candidate caught no failures, so lead time does not exist."
     else:

@@ -19,7 +19,7 @@ import pandas as pd
 
 from promotegate.dataset import generate_fleet
 from promotegate.gate import Rules, decide
-from promotegate.metrics import score_alarms
+from promotegate.metrics import score_alarms, score_snapshots
 from promotegate.modeling import explain, temperature_limit, train_candidate
 from promotegate.profile import profile_fleet
 
@@ -103,13 +103,22 @@ class Studio:
             return self.state()
 
     def _score(self, scorer, frame: pd.DataFrame):
-        scored = frame.copy()
-        scored["score"] = scorer.scores(scored)
-        return score_alarms(scored, scorer.threshold, self.fleet.horizon_hours), scored["score"].to_numpy()
+        scores = scorer.scores(frame)
+        if self.fleet.snapshots:
+            metrics = score_snapshots(frame["is_fault"].to_numpy(), scores, scorer.threshold)
+        else:
+            scored = frame.copy()
+            scored["score"] = scores
+            metrics = score_alarms(scored, scorer.threshold, self.fleet.horizon_hours)
+        return metrics, scores
 
     def run(self) -> dict:
         with self._lock:
-            self.fleet = generate_fleet()
+            self.fleet = self._load_fleet()
+            if self.fleet.snapshots:
+                from promotegate.metallicadour import vibration_limit
+
+                self.incumbent = vibration_limit(self.fleet.readings)
             self.profile = profile_fleet(self.fleet)
             holdout = self.fleet.readings[self.fleet.readings["split"] == "held_out"].copy()
             rules = Rules.from_dict(self.rules.to_dict())
@@ -178,6 +187,16 @@ class Studio:
             ]
             return self.state()
 
+    def _load_fleet(self):
+        root = Path(__file__).resolve().parents[1]
+        zip_path = root / "data" / "metallicadour.zip"
+        cache_path = root / "data" / "metallicadour_features.csv"
+        if zip_path.exists() or cache_path.exists():
+            from promotegate.metallicadour import load_fleet
+
+            return load_fleet(zip_path, cache_path)
+        return generate_fleet()
+
     def _rewrite_audit(self) -> None:
         with self._audit_path().open("w") as handle:
             for record in self.audit:
@@ -223,8 +242,8 @@ def _hours(value) -> str:
 def _transcript(profile: dict, incumbent_name: str, evaluations: list[dict]) -> list[str]:
     lines = [
         (
-            f"Profiled {profile['name']}: {profile['assets']} compressors, "
-            f"{profile['rows']} hourly readings, horizon {profile['horizon_hours']}h."
+            f"Profiled {profile['name']}: {profile['assets']} assets, "
+            f"{profile['rows']} rows, horizon {profile['horizon_hours']}h."
         )
     ]
     for issue in profile["issues"]:
@@ -232,7 +251,7 @@ def _transcript(profile: dict, incumbent_name: str, evaluations: list[dict]) -> 
             lines.append("Data: " + issue["message"])
     lines.append(f"Production model under test is {incumbent_name}.")
     lines.append(
-        "Trained LightGBM and XGBoost on the train compressors. "
+        "Trained LightGBM and XGBoost on the training split. "
         "Alarm thresholds were set on the training compressors only, under a 2% false-alarm cap. Held-out failures were not used."
     )
     eligible = []

@@ -30,6 +30,11 @@ class Fleet:
     name: str
     readings: pd.DataFrame
     horizon_hours: int
+    features: list[str] | None = None
+    snapshots: bool = False
+
+    def feature_names(self) -> list[str]:
+        return list(self.features) if self.features is not None else list(FEATURES)
 
     def assets(self, split: str) -> list[str]:
         ids = (

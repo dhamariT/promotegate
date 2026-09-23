@@ -7,9 +7,10 @@ from promotegate.dataset import FEATURES, Fleet
 
 def profile_fleet(fleet: Fleet) -> dict:
     frame = fleet.readings
+    features = fleet.feature_names()
     issues: list[dict] = []
 
-    for feature in FEATURES:
+    for feature in features:
         missing = float(frame[feature].isna().mean())
         if missing >= 0.005:
             issues.append(
@@ -20,7 +21,7 @@ def profile_fleet(fleet: Fleet) -> dict:
             )
 
     for asset, group in frame.groupby("asset_id"):
-        if len(group) < 48:
+        if not fleet.snapshots and len(group) < 48:
             issues.append(
                 {
                     "severity": "warn",
@@ -35,7 +36,7 @@ def profile_fleet(fleet: Fleet) -> dict:
                     "message": f"{asset} has {duplicated} duplicated hour stamp.",
                 }
             )
-        for feature in FEATURES:
+        for feature in features:
             if len(group) > 48 and group[feature].nunique(dropna=True) <= 1:
                 issues.append(
                     {
@@ -52,7 +53,7 @@ def profile_fleet(fleet: Fleet) -> dict:
         {
             "severity": "info",
             "message": (
-                f"{failed} of {assets} compressors fail in the record. "
+                f"{failed} of {assets} assets fail in the record. "
                 f"{held_failures} of those failures are held out for the gate. "
                 "Row accuracy is not a promotion metric."
             ),

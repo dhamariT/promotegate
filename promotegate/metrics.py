@@ -23,6 +23,8 @@ class AlarmMetrics:
     false_alarm_hours: int
     healthy_hours: int
     lead_hours: list[float]
+    # False when the dataset is a set of labeled snapshots and has no failure clock.
+    lead_applicable: bool = True
 
     @property
     def missed_failure_rate(self) -> float | None:
@@ -87,4 +89,19 @@ def score_alarms(frame: pd.DataFrame, threshold: float, horizon_hours: int) -> A
         false_alarm_hours=false_hours,
         healthy_hours=healthy,
         lead_hours=leads,
+    )
+
+
+def score_snapshots(is_fault: np.ndarray, scores: np.ndarray, threshold: float) -> AlarmMetrics:
+    """Score labeled recordings. Each recording is one example, not an hour of life."""
+    fault = np.asarray(is_fault, dtype=bool)
+    alarmed = np.isfinite(scores) & (np.asarray(scores, dtype=float) >= threshold)
+    healthy = ~fault
+    return AlarmMetrics(
+        failures=int(fault.sum()),
+        missed_failures=int((fault & ~alarmed).sum()),
+        false_alarm_hours=int((healthy & alarmed).sum()),
+        healthy_hours=int(healthy.sum()),
+        lead_hours=[],
+        lead_applicable=False,
     )
