@@ -1,11 +1,15 @@
 const titles = {
   overview: "Overview",
   data: "Recordings",
-  models: "Models",
+  models: "The change",
   gate: "Decision",
   explain: "Why it scored",
   audit: "Audit",
 };
+
+// Controls, not candidates. They exist to prove the gate refuses a model that
+// wins one metric by abandoning the other. Nobody would ever ship these.
+const CONTROLS = new Set(["Always alarm", "Never alarm"]);
 
 let state = null;
 let page = "overview";
@@ -57,22 +61,22 @@ function overview() {
   const production = best?.incumbent_metrics;
   const model = best?.candidate_metrics;
   if (!best) {
-    return `<section class="hero"><div><h2>No model has earned promotion.</h2><p class="quiet">Run is loaded from the ABB recordings. Open Models to see why each one was rejected.</p></div></section>`;
+    return `<section class="hero"><div><h2>No change has earned production.</h2><p class="quiet">Run is loaded from the ABB recordings. Open The change to see why every proposal was refused.</p></div></section>`;
   }
   return `<section class="hero">
     <div>
-      <p class="verdict promote">${best.promoted ? "In production" : "Ready for production"}</p>
-      <h2>${best.candidate_name} beats the vibration limit</h2>
-      <p>On recordings this model had not seen, it missed ${model.missed_failures} of ${model.failures} faults. The limit already in production missed ${production.missed_failures}. False alarms were ${pct(model.false_alarm_rate)} against ${pct(production.false_alarm_rate)}.</p>
+      <p class="verdict promote">${best.promoted ? "Shipped" : "Safe to ship"}</p>
+      <h2>Swapping ${best.incumbent_name} for ${best.candidate_name} is the safer alarm</h2>
+      <p>On recordings neither one had seen, the change misses ${model.missed_failures} of ${model.failures} faults where production misses ${production.missed_failures}, and false-alarms at ${pct(model.false_alarm_rate)} against ${pct(production.false_alarm_rate)}. That is what earned it promotion, not its training score.</p>
       <div class="actions">
-        <button class="primary" type="button" data-promote="${best.id}" ${best.promoted ? "disabled" : ""}>${best.promoted ? "In production" : "Promote into production"}</button>
-        <button class="ghost" type="button" data-go="models">Compare all models</button>
+        <button class="primary" type="button" data-promote="${best.id}" ${best.promoted ? "disabled" : ""}>${best.promoted ? "In production" : "Ship this change"}</button>
+        <button class="ghost" type="button" data-go="models">See the change</button>
       </div>
     </div>
     <div class="stats">
-      <div class="stat"><strong>${model.missed_failures}/${model.failures}</strong><span>Faults missed</span></div>
-      <div class="stat"><strong>${pct(model.false_alarm_rate)}</strong><span>False alarms</span></div>
-      <div class="stat"><strong>${production.missed_failures}/${production.failures}</strong><span>Missed by production</span></div>
+      <div class="stat"><strong>${production.missed_failures}/${production.failures}</strong><span>Faults missed today</span></div>
+      <div class="stat"><strong>${model.missed_failures}/${model.failures}</strong><span>Missed after the change</span></div>
+      <div class="stat"><strong>${pct(model.false_alarm_rate)}</strong><span>False alarms after</span></div>
     </div>
   </section>
   <p class="note">These are held-out passes from a real ABB IRB 6660. More passes from the line make the next comparison stricter, not looser.</p>`;
@@ -93,23 +97,57 @@ function data() {
   </section>`;
 }
 
+function leadText(metrics) {
+  if (metrics.lead_applicable === false) return "Not in this data";
+  if (metrics.median_lead_hours === null || metrics.median_lead_hours === undefined) return "None";
+  return `${Number(metrics.median_lead_hours).toFixed(1)}h`;
+}
+
 function models() {
-  const rows = state.evaluations.map((item) => {
+  const proposal = winner() || state.evaluations.find((item) => !CONTROLS.has(item.candidate_name));
+  if (!proposal) return `<p class="quiet">No change has been proposed.</p>`;
+  const today = proposal.incumbent_metrics;
+  const after = proposal.candidate_metrics;
+  const ready = proposal.decision.verdict === "promote" && !proposal.promoted;
+
+  const row = (label, now, next) =>
+    `<tr><td>${label}</td><td class="quiet">${now}</td><td>${next}</td></tr>`;
+
+  const rest = state.evaluations.filter((item) => item.id !== proposal.id).map((item) => {
     const metrics = item.candidate_metrics;
-    const ready = item.decision.verdict === "promote" && !item.promoted;
-    return `<tr class="${item.decision.verdict === "promote" ? "winner" : ""}">
-      <td>${item.candidate_name}</td>
+    const control = CONTROLS.has(item.candidate_name);
+    return `<tr>
+      <td>${item.candidate_name}${control ? ` <span class="control-tag">control</span>` : ""}</td>
       <td>${metrics.missed_failures}/${metrics.failures}</td>
       <td>${pct(metrics.false_alarm_rate)}</td>
       <td class="verdict ${item.decision.verdict}">${verdictLabel(item.decision.verdict)}</td>
-      <td>${ready ? `<button class="primary" type="button" data-promote="${item.id}">Promote</button>` : item.promoted ? "In production" : "—"}</td>
     </tr>`;
   }).join("");
-  return `<section class="panel"><table>
-    <thead><tr><th>Model</th><th>Missed faults</th><th>False alarms</th><th>Gate</th><th></th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
-  <p class="note">Production on this comparison missed ${state.evaluations[0]?.incumbent_metrics.missed_failures ?? "—"} of ${state.evaluations[0]?.incumbent_metrics.failures ?? "—"} and false-alarmed at ${pct(state.evaluations[0]?.incumbent_metrics.false_alarm_rate)}.</p>
+
+  return `<section class="panel">
+    <p class="verdict ${proposal.decision.verdict}">${verdictLabel(proposal.decision.verdict)}</p>
+    <h2 style="margin-top:0.3rem">Replace ${proposal.incumbent_name} with ${proposal.candidate_name}</h2>
+    <p class="quiet" style="margin:0.4rem 0 0.9rem">This is the change being judged, not a ranking. Both were scored on the same ${after.failures} held-out faults. Production stays exactly where it is unless the change clears every pinned rule.</p>
+    <table>
+      <thead><tr><th>On held-out faults</th><th>Production today</th><th>After this change</th></tr></thead>
+      <tbody>
+        ${row("Faults missed", `${today.missed_failures}/${today.failures}`, `${after.missed_failures}/${after.failures}`)}
+        ${row("False alarms", pct(today.false_alarm_rate), pct(after.false_alarm_rate))}
+        ${row("Warning time", leadText(today), leadText(after))}
+      </tbody>
+    </table>
+    <div class="actions">
+      <button class="primary" type="button" data-promote="${proposal.id}" ${ready ? "" : "disabled"}>${proposal.promoted ? "Shipped" : ready ? "Ship this change" : "Not promoted"}</button>
+      <button class="ghost" type="button" data-go="gate">Why the gate allowed it</button>
+    </div>
+  </section>
+  <section class="panel">
+    <h2>Also evaluated, not shipped</h2>
+    <p class="quiet" style="margin:0.4rem 0 0.9rem">None of these earned the change. The two marked as controls exist to attack the gate: each games one metric by abandoning the other, and a gate worth trusting has to refuse them.</p>
+    <table>
+      <thead><tr><th>Model</th><th>Faults missed</th><th>False alarms</th><th>Gate</th></tr></thead>
+      <tbody>${rest}</tbody>
+    </table>
   </section>`;
 }
 
@@ -120,10 +158,10 @@ function gate() {
   const ready = best.decision.verdict === "promote" && !best.promoted;
   return `<section class="panel">
     <p class="verdict ${best.decision.verdict}">${verdictLabel(best.decision.verdict)}</p>
-    <h2 style="margin-top:0.3rem">${best.candidate_name}</h2>
-    <p class="quiet" style="margin:0.4rem 0 0.6rem">${best.decision.summary}</p>
+    <h2 style="margin-top:0.3rem">Replace ${best.incumbent_name} with ${best.candidate_name}</h2>
+    <p class="quiet" style="margin:0.4rem 0 0.6rem">Every rule below was pinned before the run. ${best.decision.summary}</p>
     ${checks}
-    <div class="actions"><button class="primary" type="button" data-promote="${best.id}" ${ready ? "" : "disabled"}>${best.promoted ? "In production" : ready ? "Promote into production" : "Not promoted"}</button></div>
+    <div class="actions"><button class="primary" type="button" data-promote="${best.id}" ${ready ? "" : "disabled"}>${best.promoted ? "In production" : ready ? "Ship this change" : "Not promoted"}</button></div>
   </section>`;
 }
 
