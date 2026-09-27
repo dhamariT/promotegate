@@ -1,3 +1,4 @@
+const path = require("path");
 const pptxgen = require("pptxgenjs");
 const pres = new pptxgen();
 pres.defineLayout({ name: "WIDE", width: 13.333, height: 7.5 });
@@ -17,7 +18,7 @@ const peach = "E7C4AE";
 const mist = "A8B0BC";
 const font = "Arial";
 
-const OUT = "/Users/dhamari/promotegate/pitch/PromoteGate-ABB-Accelerator.pptx";
+const OUT = path.join(__dirname, "PromoteGate-ABB-Accelerator.pptx");
 
 function header(slide, num, section) {
   slide.addText(num, {
