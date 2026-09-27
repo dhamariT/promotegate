@@ -238,11 +238,89 @@ function vrule(slide, x, y, h, color) {
   footer(s);
 }
 
-// 5 — Proof
+// 5 — The gate
 {
   const s = pres.addSlide();
   s.background = { color: cream };
-  header(s, "05", "THE PROOF");
+  header(s, "05", "THE GATE");
+  s.addText("Five rules, pinned before anything is trained.", {
+    x: 0.5, y: 0.86, w: 12.3, h: 0.42,
+    fontFace: font, fontSize: 26, color: ink, bold: true, margin: 0,
+  });
+  s.addText("Nobody tunes them afterward to let a favourite through. The new model has to clear every one, on faults it has never seen.", {
+    x: 0.5, y: 1.32, w: 12.2, h: 0.36,
+    fontFace: font, fontSize: 14, color: slate, margin: 0,
+  });
+
+  const rules = [
+    ["Enough evidence", "At least 8 held-out faults, or there is no verdict.", "55 held out"],
+    ["Misses no more", "Missed faults must not rise above the model in production.", "4 vs 43"],
+    ["Cries wolf less", "False alarms under 5%, and at most 1 point above production.", "0% vs 15.4%"],
+    ["Warns no later", "Scored only when the recordings carry a failure clock. This set does not, so it is not scored.", "Not in this data"],
+    ["Genuinely better", "Ahead of production on at least one metric. A tie does not ship.", "Two of two"],
+  ];
+  rules.forEach((r, i) => {
+    const y = 1.9 + i * 0.78;
+    s.addShape(pres.shapes.RECTANGLE, {
+      x: 0.5, y, w: 8.1, h: 0.015,
+      fill: { color: rule }, line: { color: rule },
+    });
+    s.addText(`0${i + 1}`, {
+      x: 0.5, y: y + 0.16, w: 0.7, h: 0.35,
+      fontFace: font, fontSize: 16, color: orange, bold: true, margin: 0,
+    });
+    s.addText(r[0], {
+      x: 1.25, y: y + 0.14, w: 2.6, h: 0.35,
+      fontFace: font, fontSize: 17, color: ink, bold: true, margin: 0,
+    });
+    s.addText(r[1], {
+      x: 3.95, y: y + 0.12, w: 3.3, h: 0.6,
+      fontFace: font, fontSize: 12, color: slate, margin: 0,
+    });
+    s.addText(r[2], {
+      x: 7.25, y: y + 0.14, w: 1.35, h: 0.35,
+      fontFace: font, fontSize: 13, color: "1F7A4D", bold: true, align: "right", margin: 0,
+    });
+  });
+  s.addShape(pres.shapes.RECTANGLE, {
+    x: 0.5, y: 1.9 + rules.length * 0.78, w: 8.1, h: 0.015,
+    fill: { color: rule }, line: { color: rule },
+  });
+
+  // No back door
+  s.addShape(pres.shapes.RECTANGLE, {
+    x: 9.05, y: 1.9, w: 3.78, h: 3.92,
+    fill: { color: navy }, line: { color: navy },
+  });
+  s.addText("NO BACK DOOR", {
+    x: 9.3, y: 2.1, w: 3.3, h: 0.28,
+    fontFace: font, fontSize: 12, color: orange, bold: true, margin: 0, charSpacing: 1.2,
+  });
+  s.addText("409", {
+    x: 9.3, y: 2.45, w: 3.3, h: 0.9,
+    fontFace: font, fontSize: 52, color: white, bold: true, margin: 0,
+  });
+  s.addText("Call the API directly on a model the gate refused, and it still says no.", {
+    x: 9.3, y: 3.4, w: 3.3, h: 0.8,
+    fontFace: font, fontSize: 14, color: mist, margin: 0,
+  });
+  s.addText("Two broken controls run every time: one that always alarms, one that never does. Each wins one metric by abandoning the other. A gate that lets either through is broken, and would say so.", {
+    x: 9.3, y: 4.3, w: 3.3, h: 1.4,
+    fontFace: font, fontSize: 12, color: peach, margin: 0,
+  });
+
+  s.addText("This is the part AutoML skips. A training score is not the decision.", {
+    x: 0.5, y: 6.25, w: 12.3, h: 0.4,
+    fontFace: font, fontSize: 15, color: orange, italic: true, margin: 0,
+  });
+  footer(s);
+}
+
+// 6 — Proof
+{
+  const s = pres.addSlide();
+  s.background = { color: cream };
+  header(s, "06", "THE PROOF");
   s.addText("A real ABB IRB 6660. 55 faults held back.", {
     x: 0.5, y: 0.86, w: 12.3, h: 0.42,
     fontFace: font, fontSize: 26, color: ink, bold: true, margin: 0,
@@ -338,7 +416,76 @@ function vrule(slide, x, y, h, color) {
   footer(s);
 }
 
-// 6 — Where it sits
+// 7 — The first run
+{
+  const s = pres.addSlide();
+  s.background = { color: cream };
+  header(s, "07", "THE FIRST RUN");
+  s.addText("The gate refused our own model first.", {
+    x: 0.5, y: 0.86, w: 12.3, h: 0.42,
+    fontFace: font, fontSize: 26, color: ink, bold: true, margin: 0,
+  });
+  s.addText("Same robot, same recordings, a few hours before the result on the last slide. A training score would have shipped it.", {
+    x: 0.5, y: 1.32, w: 12.2, h: 0.36,
+    fontFace: font, fontSize: 14, color: slate, margin: 0,
+  });
+
+  // Left: first run
+  s.addShape(pres.shapes.RECTANGLE, {
+    x: 0.5, y: 1.9, w: 5.95, h: 4.2,
+    fill: { color: navy }, line: { color: navy },
+  });
+  s.addText("RUN ONE    REFUSED", {
+    x: 0.75, y: 2.1, w: 5.5, h: 0.28,
+    fontFace: font, fontSize: 12, color: orange, bold: true, margin: 0, charSpacing: 1.2,
+  });
+  s.addText("0", {
+    x: 0.75, y: 2.45, w: 1.4, h: 0.9,
+    fontFace: font, fontSize: 52, color: white, bold: true, margin: 0,
+  });
+  s.addText("of 53 faults missed.\nLooks perfect.", {
+    x: 2.2, y: 2.6, w: 3.9, h: 0.65,
+    fontFace: font, fontSize: 15, color: mist, margin: 0,
+  });
+  s.addText("93%", {
+    x: 0.75, y: 3.45, w: 2.2, h: 0.9,
+    fontFace: font, fontSize: 52, color: orange, bold: true, margin: 0,
+  });
+  s.addText("false alarms on healthy passes.\nIt flagged nearly everything.", {
+    x: 3.0, y: 3.6, w: 3.2, h: 0.65,
+    fontFace: font, fontSize: 15, color: mist, margin: 0,
+  });
+  s.addText("The model had memorised the machine setups. Healthy and faulty recordings scored the same. The gate saw the false alarms and refused it, and refused XGBoost the same way.", {
+    x: 0.75, y: 4.6, w: 5.5, h: 1.3,
+    fontFace: font, fontSize: 14, color: peach, margin: 0,
+  });
+
+  // Right: what changed
+  const fixes = [
+    ["What we changed", "The cut recipe (depth, feed, spindle speed) became an input, so the model had to learn the fault, not the setup."],
+    ["What we did not change", "The rules. The same five checks scored run two, on 55 held-out faults. LightGBM cleared them. XGBoost did not."],
+    ["What we still refuse to claim", "Warning time. These recordings are labelled snapshots, not a countdown to a failure. The gate marks it not scored rather than guessing."],
+  ];
+  fixes.forEach((f, i) => {
+    const y = 1.9 + i * 1.42;
+    s.addText(f[0], {
+      x: 6.95, y, w: 5.9, h: 0.36,
+      fontFace: font, fontSize: 18, color: ink, bold: true, margin: 0,
+    });
+    s.addText(f[1], {
+      x: 6.95, y: y + 0.42, w: 5.9, h: 0.85,
+      fontFace: font, fontSize: 14, color: slate, margin: 0,
+    });
+  });
+
+  s.addText("Every verdict the gate gives is written to the audit log, refusals included.", {
+    x: 0.5, y: 6.35, w: 12.3, h: 0.36,
+    fontFace: font, fontSize: 15, color: orange, italic: true, margin: 0,
+  });
+  footer(s);
+}
+
+// 8 — Where it sits
 {
   const s = pres.addSlide();
   s.background = { color: cream };
@@ -346,7 +493,7 @@ function vrule(slide, x, y, h, color) {
     x: 0, y: 0, w: 5.15, h: 7.5,
     fill: { color: navy }, line: { color: navy },
   });
-  s.addText("06    ON THE FLOOR", {
+  s.addText("08    ON THE FLOOR", {
     x: 0.42, y: 0.42, w: 4.4, h: 0.3,
     fontFace: font, fontSize: 13, color: orange, bold: true, margin: 0, charSpacing: 1.1,
   });
@@ -386,7 +533,7 @@ function vrule(slide, x, y, h, color) {
   });
 }
 
-// 7 — Scale, full split
+// 9 — Scale, full split
 {
   const s = pres.addSlide();
   s.background = { color: cream };
@@ -395,7 +542,7 @@ function vrule(slide, x, y, h, color) {
     fill: { color: navy }, line: { color: navy },
   });
 
-  s.addText("07    THIS DEMO", {
+  s.addText("09    THIS DEMO", {
     x: 0.48, y: 0.45, w: 5.6, h: 0.3,
     fontFace: font, fontSize: 13, color: orange, bold: true, margin: 0, charSpacing: 1.2,
   });
@@ -438,7 +585,58 @@ function vrule(slide, x, y, h, color) {
   });
 }
 
-// 8 — Close
+// 10 — The ask
+{
+  const s = pres.addSlide();
+  s.background = { color: cream };
+  header(s, "10", "WITH ABB");
+  s.addText("What the accelerator unlocks.", {
+    x: 0.5, y: 0.9, w: 12.3, h: 0.55,
+    fontFace: font, fontSize: 32, color: ink, bold: true, margin: 0,
+  });
+  s.addText("The gate works on one public dataset from one robot. Three things only ABB can put in front of it.", {
+    x: 0.5, y: 1.52, w: 12.2, h: 0.5,
+    fontFace: font, fontSize: 16, color: slate, margin: 0,
+  });
+
+  const asks = [
+    ["01", "A second cell", "Logs from a weld or assembly cell, so the same five rules are tested on a different job. The demo is machining. The claim is every cell.", "PROVE IT TRANSFERS"],
+    ["02", "A failure clock", "Recordings that run up to a real breakdown, so warning time becomes a scored rule instead of the one we refuse to fake.", "SCORE THE THIRD METRIC"],
+    ["03", "A maintenance lead", "One person with a live cell and the Promote click for a season. The audit log of what they shipped, and what the gate refused, is the deliverable.", "PUT THE CLICK IN A HAND"],
+  ];
+  asks.forEach((col, i) => {
+    const x = 0.5 + i * 4.2;
+    if (i > 0) vrule(s, x - 0.22, 2.3, 3.55, rule);
+    s.addText(col[0], {
+      x, y: 2.35, w: 3.7, h: 0.4,
+      fontFace: font, fontSize: 18, color: orange, bold: true, margin: 0,
+    });
+    s.addText(col[1], {
+      x, y: 2.9, w: 3.75, h: 0.6,
+      fontFace: font, fontSize: 24, color: ink, bold: true, margin: 0,
+    });
+    s.addText(col[2], {
+      x, y: 3.6, w: 3.75, h: 1.7,
+      fontFace: font, fontSize: 15, color: slate, margin: 0,
+    });
+    s.addText(col[3], {
+      x, y: 5.72, w: 3.7, h: 0.28,
+      fontFace: font, fontSize: 12, color: orange, bold: true, margin: 0, charSpacing: 1.4,
+    });
+  });
+
+  s.addShape(pres.shapes.RECTANGLE, {
+    x: 0.5, y: 6.2, w: 12.33, h: 0.015,
+    fill: { color: rule }, line: { color: rule },
+  });
+  s.addText("Nothing here touches the controller. The input is the log the robot already writes, and the output is a verdict a person acts on.", {
+    x: 0.5, y: 6.3, w: 12.3, h: 0.5,
+    fontFace: font, fontSize: 14, color: slate, italic: true, margin: 0,
+  });
+  footer(s);
+}
+
+// 11 — Close
 {
   const s = pres.addSlide();
   s.background = { color: navy };
