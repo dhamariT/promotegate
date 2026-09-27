@@ -13,3 +13,9 @@ uvicorn server:app --port 8841
 ```
 
 Open http://127.0.0.1:8841. Save the rules, run the agent, and promote only a candidate whose verdict is `promote`.
+
+The pitch deck in `pitch/` is generated from `deck.js`:
+
+```bash
+cd pitch && npm install && npm run build
+```

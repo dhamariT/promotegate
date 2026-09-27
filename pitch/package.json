@@ -1,0 +1,11 @@
+{
+  "name": "promotegate-pitch",
+  "private": true,
+  "description": "Builds PromoteGate-ABB-Accelerator.pptx from deck.js",
+  "scripts": {
+    "build": "node deck.js"
+  },
+  "dependencies": {
+    "pptxgenjs": "^3.12.0"
+  }
+}
